@@ -1,8 +1,64 @@
 #include "WiFiProvisioner.h"
 
 // Definição da página HTML (static const)
+// ATUALIZADO com CSS e JavaScript para o relógio
 const char *WiFiProvisioner::_portal_html = R"EOF(
-<!DOCTYPE html><html><head><title>Configura&ccedil;&atilde;o Wi-Fi ESP32</title><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font-family:Arial,sans-serif;background-color:#f0f0f0;margin:20px;}.container{max-width:400px;margin:auto;padding:20px;background-color:#fff;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}h2{text-align:center;color:#333;}label{display:block;margin-top:15px;font-weight:bold;}input[type="text"],input[type="password"]{width:calc(100% - 20px);padding:10px;margin-top:5px;border:1px solid #ccc;border-radius:4px;}input[type="submit"]{width:100%;background-color:#007bff;color:white;padding:14px 20px;margin-top:20px;border:none;border-radius:4px;cursor:pointer;font-size:16px;}input[type="submit"]:hover{background-color:#0056b3;}</style></head><body><div class="container"><h2>Configurar Wi-Fi (ESP32)</h2><form action="/save" method="POST"><label for="ssid">Rede Wi-Fi (SSID):</label><input type="text" id="ssid" name="ssid" required><label for="pass">Senha:</label><input type="password" id="pass" name="pass"><input type="submit" value="Salvar e Conectar"></form></div></body></html>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Configura&ccedil;&atilde;o Wi-Fi ESP32</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f0f0f0; margin: 20px; }
+        .container { max-width: 400px; margin: auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; }
+        label { display: block; margin-top: 15px; font-weight: bold; }
+        input[type="text"], input[type="password"] { width: calc(100% - 20px); padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
+        input[type="submit"] { width: 100%; background-color: #007bff; color: white; padding: 14px 20px; margin-top: 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        input[type="submit"]:hover { background-color: #0056b3; }
+        /* Estilo para o relógio */
+        .clock { text-align: center; font-size: 0.9em; color: #555; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Configurar Wi-Fi (ESP32)</h2>
+        <form action="/save" method="POST">
+            <label for="ssid">Rede Wi-Fi (SSID):</label>
+            <input type="text" id="ssid" name="ssid" required>
+            <label for="pass">Senha:</label>
+            <input type="password" id="pass" name="pass">
+            <input type="submit" value="Salvar e Conectar">
+        </form>
+        
+        <p id="clock" class="clock">Carregando hora local...</p>
+    </div>
+
+    <script>
+        function updateTime() {
+            var now = new Date();
+            var options = { 
+                weekday: 'long', 
+                day: '2-digit', 
+                month: 'long', 
+                year: 'numeric',
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            };
+            
+            // Tenta usar o locale do navegador (ex: pt-BR, pt-PT, en-US)
+            var lang = navigator.language || 'pt-PT';
+            var timeString = 'Hora local: ' + now.toLocaleString(lang, options);
+            
+            document.getElementById('clock').innerHTML = timeString;
+        }
+        // Atualiza agora e depois a cada segundo
+        updateTime();
+        setInterval(updateTime, 1000);
+    </script>
+</body>
+</html>
 )EOF";
 
 WiFiProvisioner::WiFiProvisioner(const char *ap_ssid)
