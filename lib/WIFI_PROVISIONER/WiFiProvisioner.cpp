@@ -69,6 +69,9 @@ WiFiProvisioner::WiFiProvisioner(const char *ap_ssid)
 
 bool WiFiProvisioner::begin()
 {
+
+    _reconnectTimer = 0;
+    _connectAttempts = 0;
     // Tenta ler as credenciais salvas
     _preferences.begin("wifi-creds", true); // read-only
     _sta_ssid = _preferences.getString("ssid", "");
@@ -99,26 +102,60 @@ bool WiFiProvisioner::begin()
 
 void WiFiProvisioner::loop()
 {
+    // --- Modo AP (Portal Cativo) ---
+    // Esta parte continua igual
     if (WiFi.getMode() == WIFI_AP)
     {
-        // Estamos em modo AP, processa requisições
         _dnsServer.processNextRequest();
         _server.handleClient();
     }
+    // --- Modo STA (Conectado à rede) ---
     else if (WiFi.getMode() == WIFI_STA)
     {
-        // Estamos conectados, monitora a conexão
+
+        // Se estamos em modo STA, mas não conectados...
         if (WiFi.status() != WL_CONNECTED)
         {
-            Serial.println("Conexão Wi-Fi perdida! Tentando reconectar...");
 
-            if (!startSTAMode())
+            // E já passou o tempo de tentar de novo (tenta a cada 5 segundos)
+            if (millis() - _reconnectTimer > 5000)
             {
-                // Se a reconexão falhar, reinicia para entrar em modo AP
-                Serial.println("Falha ao reconectar. Reiniciando para modo AP.");
-                delay(1000);
-                ESP.restart();
+                _reconnectTimer = millis(); // Reseta o timer
+                _connectAttempts++;
+
+                Serial.printf("[WiFi] Conexão perdida. Tentando reconectar (Tentativa %d)...\n", _connectAttempts);
+
+                // Tenta reconectar de forma NÃO-BLOQUEANTE
+                WiFi.reconnect();
+
+                // Se falharmos muitas vezes (ex: 10 vezes),
+                // algo está muito errado (ex: senha mudou).
+                // Reiniciamos para o modo AP.
+                if (_connectAttempts > 10)
+                {
+                    Serial.println("[WiFi] Muitas falhas. Reiniciando em modo AP.");
+
+                    // Limpa as credenciais ruins antes de reiniciar
+                    _preferences.begin("wifi-creds", false);
+                    _preferences.clear();
+                    _preferences.end();
+
+                    delay(1000);   // Pausa para o Serial enviar a msg
+                    ESP.restart(); // O setup() tratará de iniciar o AP
+                }
             }
+        }
+        // Se estamos conectados...
+        else
+        {
+            // Se vínhamos de uma tentativa de reconexão, regista o sucesso
+            if (_connectAttempts > 0)
+            {
+                Serial.println("[WiFi] Reconexão bem-sucedida!");
+            }
+            // Reseta o contador e o timer
+            _connectAttempts = 0;
+            _reconnectTimer = millis();
         }
     }
 }

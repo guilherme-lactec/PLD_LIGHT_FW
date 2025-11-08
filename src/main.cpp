@@ -1,14 +1,14 @@
 #include <Arduino.h>
-#include "WiFiProvisioner.h" // Nossa biblioteca
-#include "time.h"            // Para NTP
-#include <WebServer.h>       // Para o novo servidor de dashboard
-#include <ArduinoJson.h>     // Para enviar dados para a página
+#include "WiFiProvisioner.h"
+#include "DashboardServer.h"
+#include "time.h"
+#include <ArduinoJson.h>
+#include <Preferences.h> // *** NVS *** Biblioteca para memória não volátil
 
-// --- Configuração da Biblioteca de Provisionamento ---
+// --- Configuração das Bibliotecas ---
 WiFiProvisioner provisioner("ESP32-Config");
-
-// --- Servidor Web do Dashboard ---
-WebServer dashboardServer(80); // O novo servidor que rodará na porta 80
+DashboardServer dashboardServer(80);
+Preferences preferences; // *** NVS *** Objeto para salvar/ler dados
 
 // --- Configuração do NTP ---
 const char *ntpServer = "a.st1.ntp.br";
@@ -18,146 +18,20 @@ const int daylightOffset_sec = 0;
 // --- Variáveis de Controle ---
 bool ntpInitialized = false;
 unsigned long lastSerialPrint = 0;
-const unsigned long SERIAL_PRINT_INTERVAL = 10000; // 10 segundos
+const unsigned long SERIAL_PRINT_INTERVAL = 10000;
 
-// --- DADOS FICTÍCIOS ---
-// Substitua isso pela leitura do seu sensor real
-float sensorFicticio = 25.0;
+// =========================================================
+// --- DADOS DO SEU PROJETO (SENSORES E ESTADO) ---
+// Sensores
+float tempFicticia = 25.0;
+float humFicticia = 60.0;
+int lumFicticia = 800;
 
-// =================================================================
-// Página HTML do Dashboard
-// Esta é a página que você verá no seu navegador
-// =================================================================
-const char *dashboard_html = R"EOF(
-<!DOCTYPE html>
-<html>
-<head>
-    <title>ESP32 Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 30px auto; padding: 20px; background-color: #fff; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #333; }
-        .card { background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-top: 20px; }
-        .card h2 { margin-top: 0; color: #0056b3; }
-        .data { font-size: 2.5em; font-weight: bold; color: #333; text-align: center; margin: 10px 0; }
-        #sensor { color: #d9534f; }
-        #time { color: #5cb85c; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>ESP32 Dashboard</h1>
-        
-        <div class="card">
-            <h2>Data & Hora (NTP)</h2>
-            <div id="date" class="data">--/--/----</div>
-            <div id="time" class="data">--:--:--</div>
-        </div>
-
-        <div class="card">
-            <h2>Sensor (Exemplo)</h2>
-            <div id="sensor" class="data">--.-- &deg;C</div>
-        </div>
-    </div>
-
-    <script>
-        // Função para buscar dados do ESP32
-        function fetchData() {
-            // Faz um pedido para o endpoint /data.json
-            fetch('/data.json')
-                .then(response => response.json())
-                .then(data => {
-                    // Atualiza os elementos HTML com os novos dados
-                    document.getElementById('date').innerText = data.date;
-                    document.getElementById('time').innerText = data.time;
-                    // Formata o sensor para 1 casa decimal
-                    document.getElementById('sensor').innerHTML = parseFloat(data.sensor).toFixed(1) + ' &deg;C';
-                })
-                .catch(error => {
-                    console.error('Erro ao buscar dados:', error);
-                    document.getElementById('date').innerText = "Erro";
-                    document.getElementById('time').innerText = "Erro";
-                    document.getElementById('sensor').innerText = "Erro";
-                });
-        }
-
-        // Chama a função pela primeira vez
-        fetchData();
-        
-        // Configura para chamar a função a cada 2 segundos
-        setInterval(fetchData, 1000);
-    </script>
-</body>
-</html>
-)EOF";
-
-// =================================================================
-// Funções de Callback do Servidor do Dashboard
-// =================================================================
-
-/**
- * @brief Envia a página HTML principal (o dashboard)
- */
-void handleDashboardRoot()
-{
-  dashboardServer.send(200, "text/html", dashboard_html);
-}
-
-/**
- * @brief Envia os dados (hora e sensor) em formato JSON
- */
-void handleDataJson()
-{
-  // 1. Simula a leitura de um sensor (substitua isso)
-  sensorFicticio += random(-5, 6) / 10.0; // Variação de +/- 0.5
-  if (sensorFicticio < 10)
-    sensorFicticio = 10;
-  if (sensorFicticio > 40)
-    sensorFicticio = 40;
-
-  // 2. Obtém a hora
-  struct tm timeinfo;
-  char dateStr[20];
-  char timeStr[20];
-
-  if (getLocalTime(&timeinfo))
-  {
-    // Hora sincronizada
-    strftime(dateStr, sizeof(dateStr), "%d/%m/%Y", &timeinfo);
-    strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &timeinfo);
-  }
-  else
-  {
-    // Hora ainda não sincronizada
-    strcpy(dateStr, "Sincronizando...");
-    strcpy(timeStr, "--:--:--");
-  }
-
-  // 3. Cria o documento JSON
-  StaticJsonDocument<256> doc;
-  doc["date"] = dateStr;
-  doc["time"] = timeStr;
-  doc["sensor"] = sensorFicticio;
-
-  // 4. Serializa o JSON e envia
-  String output;
-  serializeJson(doc, output);
-  dashboardServer.send(200, "application/json", output);
-}
-
-/**
- * @brief Configura e inicia o servidor do dashboard.
- */
-void setupDashboardServer()
-{
-  dashboardServer.on("/", HTTP_GET, handleDashboardRoot);
-  dashboardServer.on("/data.json", HTTP_GET, handleDataJson);
-  dashboardServer.begin();
-  Serial.println("Servidor de Dashboard iniciado!");
-  Serial.print("Acesse o dashboard em: http://");
-  Serial.println(WiFi.localIP());
-}
+// Configurações
+String horaLigar;    // Agora são inicializadas no setup()
+String horaDesligar; // Agora são inicializadas no setup()
+int aceleracaoSalva; // Agora é inicializada no setup()
+// =========================================================
 
 // =================================================================
 // Funções Principais (setup e loop)
@@ -179,21 +53,42 @@ void printSerialStatus()
   Serial.printf("  IP: %s\n", WiFi.localIP().toString().c_str());
 
   if (getLocalTime(&timeinfo, 100))
-  { // Tenta obter a hora (timeout 100ms)
+  {
     if (!ntpInitialized)
       ntpInitialized = true;
     char buffer[80];
     strftime(buffer, sizeof(buffer), "%A, %d/%m/%Y %H:%M:%S", &timeinfo);
     Serial.printf("  Hora: %s\n", buffer);
   }
-  else if (!ntpInitialized)
+  else
   {
     Serial.println("  Hora: ...aguardando sincronia NTP...");
   }
-  else
-  {
-    Serial.println("  Hora: Falha temporária ao obter hora.");
-  }
+
+  Serial.printf("  Sensores: Temp=%.1f C, Hum=%.1f %%, Lum=%d lux\n",
+                tempFicticia, humFicticia, lumFicticia);
+  Serial.printf("  Config: Luz Ligar=%s, Desligar=%s, Acel=%d\n",
+                horaLigar.c_str(), horaDesligar.c_str(), aceleracaoSalva);
+}
+
+// Lógica de simulação (ou leitura real) dos sensores
+void atualizarSensores()
+{
+  tempFicticia += random(-5, 6) / 10.0;
+  humFicticia += random(-10, 11) / 10.0;
+  lumFicticia += random(-50, 51);
+
+  if (tempFicticia < 15)
+    tempFicticia = 15;
+  if (humFicticia < 30)
+    humFicticia = 30;
+  if (lumFicticia < 100)
+    lumFicticia = 100;
+}
+
+void checkLightSchedule()
+{
+  // Lógica para ligar/desligar a luz
 }
 
 void setup()
@@ -201,34 +96,85 @@ void setup()
   Serial.begin(115200);
   Serial.println("\n\nIniciando...");
 
+  // *** NVS ***
+  // Carrega as configurações salvas
+  // Usamos "app-settings" como "espaço" (namespace)
+  preferences.begin("app-settings", false);
+
+  // Tenta ler os valores. Se não existirem, usa os valores padrão (o 2º argumento).
+  horaLigar = preferences.getString("horaLigar", "18:00");
+  horaDesligar = preferences.getString("horaDesligar", "06:00");
+  aceleracaoSalva = preferences.getInt("acelSalva", 50);
+
+  preferences.end(); // Fecha as preferências (boa prática)
+
+  Serial.println("Configurações carregadas da NVS:");
+  Serial.printf("  Ligar: %s, Desligar: %s, Acel: %d\n", horaLigar.c_str(), horaDesligar.c_str(), aceleracaoSalva);
+
   if (provisioner.begin())
   {
     // --- Conectado com sucesso ---
     initNTP();
-    setupDashboardServer(); // Inicia o *novo* servidor
+
+    // CALLBACK 1: O que o ESP32 ENVIA para a web (GET)
+    dashboardServer.onDataRequest([](JsonDocument &doc)
+                                  {
+            
+            atualizarSensores(); // Atualiza leituras
+
+            // Adiciona os dados dos SENSORES ao JSON
+            doc["temperatura"] = tempFicticia;
+            doc["humidade"] = humFicticia;
+            doc["luminosidade"] = lumFicticia;
+            
+            // Adiciona os dados das CONFIGURAÇÕES (lidas da NVS) ao JSON
+            doc["hora_ligar"] = horaLigar;       
+            doc["hora_desligar"] = horaDesligar; 
+            doc["aceleracao"] = aceleracaoSalva; });
+
+    // CALLBACK 2: O que o ESP32 RECEBE da web (POST)
+    dashboardServer.onSettingsRequest([](String ligar, String desligar, int aceleracao)
+                                      {
+            
+            // 1. Salva os valores recebidos nas variáveis globais (RAM)
+            horaLigar = ligar;
+            horaDesligar = desligar;
+            aceleracaoSalva = aceleracao;
+
+            // 2. *** NVS *** Salva os novos valores na memória não volátil
+            preferences.begin("app-settings", false); // Abre para escrita
+            preferences.putString("horaLigar", horaLigar);
+            preferences.putString("horaDesligar", horaDesligar);
+            preferences.putInt("acelSalva", aceleracaoSalva);
+            preferences.end(); // Fecha
+
+            // Imprime no Serial para confirmar
+            Serial.println("\n!!! NOVAS CONFIGURAÇÕES SALVAS NA NVS !!!");
+            Serial.printf("Ligar às: %s\n", horaLigar.c_str());
+            Serial.printf("Desligar às: %s\n", horaDesligar.c_str());
+            Serial.printf("Aceleração: %d\n\n", aceleracaoSalva); });
+
+    // Inicia o servidor do dashboard
+    dashboardServer.begin();
+    Serial.print("Acesse o dashboard em: http://");
+    Serial.println(WiFi.localIP());
   }
   else
   {
     // --- Em modo de configuração ---
     Serial.println("Iniciado em modo AP para configuração.");
-    Serial.println("Conecte-se à rede 'ESP32-Config'.");
   }
 }
 
 void loop()
 {
-  // A biblioteca de provisionamento *sempre* roda no loop
-  // (no modo AP, ela cuida do portal; no modo STA, ela cuida da reconexão)
   provisioner.loop();
 
-  // O código abaixo só roda se estivermos conectados ao Wi-Fi
   if (provisioner.isConnected())
   {
+    dashboardServer.loop(); // Processa clientes web
+    checkLightSchedule();   // Sua lógica de controle
 
-    // Processa requisições do servidor do dashboard
-    dashboardServer.handleClient();
-
-    // Imprime o status no Serial a cada 10 segundos
     if (millis() - lastSerialPrint > SERIAL_PRINT_INTERVAL)
     {
       printSerialStatus();

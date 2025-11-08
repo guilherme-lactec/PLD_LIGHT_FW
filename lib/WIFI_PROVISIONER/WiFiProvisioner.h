@@ -59,6 +59,9 @@ private:
 
     // --- Página HTML ---
     static const char *_portal_html;
+
+    unsigned long _reconnectTimer; // Timer para reconexão
+    int _connectAttempts;
 };
 
 #endif // WIFI_PROVISIONER_H
