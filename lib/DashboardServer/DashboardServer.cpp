@@ -1,7 +1,7 @@
 #include "DashboardServer.h"
 #include "time.h" // Para buscar a hora NTP
 
-// ATUALIZADO: HTML com slider de aceleração dentro do formulário
+// ATUALIZADO: Renomeado 'Aceleração' para 'Luz Máxima (%)'
 const char *DashboardServer::_dashboard_html = R"EOF(
 <!DOCTYPE html>
 <html>
@@ -31,7 +31,7 @@ const char *DashboardServer::_dashboard_html = R"EOF(
         .form-group input[type="range"] { flex-grow: 1; margin: 0 15px; }
         .form-group button { background-color: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-size: 1em; }
         .form-group button:hover { background-color: #0056b3; }
-        #acelValor { font-size: 1.1em; font-weight: bold; min-width: 40px; text-align: right; }
+        #luzValor { font-size: 1.1em; font-weight: bold; min-width: 50px; text-align: right; } /* Aumentei o min-width */
 
     </style>
 </head>
@@ -59,10 +59,9 @@ const char *DashboardServer::_dashboard_html = R"EOF(
                     </div>
                     
                     <div class="form-group">
-                        <label for="aceleracao">Acelera&ccedil;&atilde;o:</label>
-                        <input type="range" id="aceleracao" name="aceleracao" min="0" max="100" value="50">
-                        <span id="acelValor">50</span>
-                    </div>
+                        <label for="luzMaxima">Luz M&aacute;xima:</label>
+                        <input type="range" id="luzMaxima" name="luzMaxima" min="0" max="100" value="80">
+                        <span id="luzValor">80 %</span> </div>
 
                     <div class="form-group">
                         <span></span> <button type="submit">Salvar Configura&ccedil;&otilde;es</button>
@@ -78,12 +77,12 @@ const char *DashboardServer::_dashboard_html = R"EOF(
     </div>
     
     <script>
-        // --- Atualiza o valor de aceleração no <span> ao arrastar o slider ---
-        var slider = document.getElementById("aceleracao");
-        var output = document.getElementById("acelValor");
-        output.innerHTML = slider.value; // Mostra o valor padrão
+        // --- Atualiza o valor de luz máxima no <span> ao arrastar o slider ---
+        var slider = document.getElementById("luzMaxima");
+        var output = document.getElementById("luzValor");
+        output.innerHTML = slider.value + " %"; // Mostra o valor padrão
         slider.oninput = function() {
-            output.innerHTML = this.value;
+            output.innerHTML = this.value + " %";
         }
 
         // --- Função para BUSCAR dados do ESP32 (GET) ---
@@ -103,8 +102,8 @@ const char *DashboardServer::_dashboard_html = R"EOF(
                     // Atualiza os valores das Configurações salvas
                     document.getElementById('horaLigar').value = data.hora_ligar;
                     document.getElementById('horaDesligar').value = data.hora_desligar;
-                    document.getElementById('aceleracao').value = data.aceleracao;
-                    document.getElementById('acelValor').innerHTML = data.aceleracao;
+                    document.getElementById('luzMaxima').value = data.luz_maxima; // Key atualizada
+                    document.getElementById('luzValor').innerHTML = data.luz_maxima + " %"; // Key atualizada
                 })
                 .catch(error => { console.error('Erro ao buscar dados:', error); });
         }
@@ -113,10 +112,9 @@ const char *DashboardServer::_dashboard_html = R"EOF(
         document.getElementById('formSettings').addEventListener('submit', function(e) {
             e.preventDefault(); // Impede o recarregamento da página
 
-            // Envia os dados do formulário
             fetch('/settings', {
                 method: 'POST',
-                body: new FormData(this) // Envia (ligar, desligar E aceleracao)
+                body: new FormData(this) // Envia (ligar, desligar E luzMaxima)
             })
             .then(response => {
                 if(response.ok) {
@@ -145,10 +143,7 @@ void DashboardServer::begin()
 {
     _server.on("/", HTTP_GET, std::bind(&DashboardServer::handleRoot, this));
     _server.on("/data.json", HTTP_GET, std::bind(&DashboardServer::handleDataJson, this));
-
-    // Rota POST para receber as configurações
     _server.on("/settings", HTTP_POST, std::bind(&DashboardServer::handleSettings, this));
-
     _server.begin();
     Serial.println("Servidor de Dashboard iniciado!");
 }
@@ -163,7 +158,6 @@ void DashboardServer::onDataRequest(DataCallback callback)
     _dataCallback = callback;
 }
 
-// Armazena o callback de settings
 void DashboardServer::onSettingsRequest(SettingsCallback callback)
 {
     _settingsCallback = callback;
@@ -180,7 +174,7 @@ void DashboardServer::handleDataJson()
 {
     StaticJsonDocument<512> doc;
 
-    // 1. A biblioteca cuida da hora
+    // 1. Hora
     struct tm timeinfo;
     char dateStr[20];
     char timeStr[20];
@@ -197,8 +191,7 @@ void DashboardServer::handleDataJson()
     doc["date"] = dateStr;
     doc["time"] = timeStr;
 
-    // 2. Chama o callback do main.cpp para adicionar
-    //    todos os outros dados (sensores E configurações salvas)
+    // 2. Chama o callback do main.cpp
     if (_dataCallback != nullptr)
     {
         _dataCallback(doc);
@@ -209,7 +202,7 @@ void DashboardServer::handleDataJson()
         doc["temperatura"] = 0;
         doc["humidade"] = 0;
         doc["luminosidade"] = 0;
-        doc["aceleracao"] = 50; // Valor de fallback
+        doc["luz_maxima"] = 80; // Key atualizada e valor padrão
         doc["hora_ligar"] = "00:00";
         doc["hora_desligar"] = "00:00";
     }
@@ -222,22 +215,22 @@ void DashboardServer::handleDataJson()
 // ATUALIZADO: Handler para o POST /settings
 void DashboardServer::handleSettings()
 {
-    // Verifica se o callback foi registrado e se os 3 argumentos chegaram
+    // Verifica os 3 argumentos com os nomes atualizados
     if (_settingsCallback &&
         _server.hasArg("ligar") &&
         _server.hasArg("desligar") &&
-        _server.hasArg("aceleracao"))
-    {
+        _server.hasArg("luzMaxima"))
+    { // Argumento atualizado
 
         // Pega os valores
         String ligar = _server.arg("ligar");
         String desligar = _server.arg("desligar");
-        int aceleracao = _server.arg("aceleracao").toInt(); // Converte para int
+        int luzMaxima = _server.arg("luzMaxima").toInt(); // Argumento atualizado
 
-        // Chama o callback no main.cpp para que ele salve os valores
-        _settingsCallback(ligar, desligar, aceleracao);
+        // Chama o callback no main.cpp
+        _settingsCallback(ligar, desligar, luzMaxima);
 
-        _server.send(200, "text/plain", "OK"); // Responde ao navegador que deu certo
+        _server.send(200, "text/plain", "OK");
     }
     else
     {
