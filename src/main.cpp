@@ -7,6 +7,11 @@
 #include <Adafruit_Sensor.h> // <-- NOVO: Biblioteca DHT
 #include <DHT.h>             // <-- NOVO: Biblioteca DHT
 
+// TODO
+//  -> add grafhs for the month
+//  -> fix update rate ( too fast cant change parameters, to slow cant see time change)
+//  -> fix pwm -> 1% no qual 0.12V
+
 // --- Configuração das Bibliotecas ---
 WiFiProvisioner provisioner("ESP32-Config");
 DashboardServer dashboardServer(80);
@@ -29,7 +34,6 @@ const int RAMP_DURATION_MINUTES = 60;
 #define DHTTYPE DHT11     // Mude para DHT11 se for o seu sensor
 #define LDR_PIN 35        // Pino do sensor de luminosidade
 DHT dht(DHTPIN, DHTTYPE); // Objeto do sensor DHT
-
 // --- Variáveis de Controle ---
 bool ntpInitialized = false;
 unsigned long lastSerialPrint = 0;
