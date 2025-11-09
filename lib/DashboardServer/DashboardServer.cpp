@@ -1,7 +1,8 @@
 #include "DashboardServer.h"
 #include "time.h" // Para buscar a hora NTP
+// ... (includes da biblioteca) ...
 
-// ATUALIZADO: Renomeado 'Aceleração' para 'Luz Máxima (%)'
+// ATUALIZADO: 'Luminosidade (raw)' e 'lux' para '(0-4095)'
 const char *DashboardServer::_dashboard_html = R"EOF(
 <!DOCTYPE html>
 <html>
@@ -9,6 +10,7 @@ const char *DashboardServer::_dashboard_html = R"EOF(
     <title>ESP32 Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
+        /* ... (nenhuma mudança no CSS) ... */
         body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }
         .container { max-width: 600px; margin: 30px auto; padding: 20px; background-color: #fff; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         h1 { text-align: center; color: #333; }
@@ -16,23 +18,18 @@ const char *DashboardServer::_dashboard_html = R"EOF(
         .card { background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; padding: 15px; }
         .card h2 { margin-top: 0; color: #0056b3; }
         .data { font-size: 2.5em; font-weight: bold; color: #333; text-align: center; margin: 10px 0; }
-        
-        /* Cores */
         #data-hora h2 { color: #5cb85c; }
         #settings-card h2 { color: #777; }
         #temperatura { color: #d9534f; }
         #humidade { color: #337ab7; }
         #luminosidade { color: #f0ad4e; }
-
-        /* Estilo para o formulário */
         .form-group { display: flex; justify-content: space-between; align-items: center; margin: 20px 0; }
         .form-group label { font-weight: bold; font-size: 1.1em; }
         .form-group input[type="time"] { border: 1px solid #ccc; border-radius: 4px; padding: 8px; font-size: 1.1em; }
         .form-group input[type="range"] { flex-grow: 1; margin: 0 15px; }
         .form-group button { background-color: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-size: 1em; }
         .form-group button:hover { background-color: #0056b3; }
-        #luzValor { font-size: 1.1em; font-weight: bold; min-width: 50px; text-align: right; } /* Aumentei o min-width */
-
+        #luzValor { font-size: 1.1em; font-weight: bold; min-width: 50px; text-align: right; }
     </style>
 </head>
 <body>
@@ -57,64 +54,65 @@ const char *DashboardServer::_dashboard_html = R"EOF(
                         <label for="horaDesligar">Desligar Luz &agrave;s:</label>
                         <input type="time" id="horaDesligar" name="desligar" required>
                     </div>
-                    
                     <div class="form-group">
                         <label for="luzMaxima">Luz M&aacute;xima:</label>
                         <input type="range" id="luzMaxima" name="luzMaxima" min="0" max="100" value="80">
-                        <span id="luzValor">80 %</span> </div>
-
+                        <span id="luzValor">80 %</span>
+                    </div>
                     <div class="form-group">
-                        <span></span> <button type="submit">Salvar Configura&ccedil;&otilde;es</button>
+                        <span></span>
+                        <button type="submit">Salvar Configura&ccedil;&otilde;es</button>
                     </div>
                 </form>
             </div>
 
             <div class="card"><h2 style="color:#d9534f">Temperatura</h2><div id="temperatura" class="data">--.-- &deg;C</div></div>
             <div class="card"><h2 style="color:#337ab7">Humidade</h2><div id="humidade" class="data">--.-- %</div></div>
-            <div class="card"><h2 style="color:#f0ad4e">Luminosidade</h2><div id="luminosidade" class="data">---- lux</div></div>
+            
+            <div class="card">
+                <h2 style="color:#f0ad4e">Luminosidade (0-4095)</h2>
+                <div id="luminosidade" class="data">----</div>
+            </div>
 
         </div>
     </div>
     
     <script>
-        // --- Atualiza o valor de luz máxima no <span> ao arrastar o slider ---
+        // ... (slider oninput) ...
         var slider = document.getElementById("luzMaxima");
         var output = document.getElementById("luzValor");
-        output.innerHTML = slider.value + " %"; // Mostra o valor padrão
+        output.innerHTML = slider.value + " %";
         slider.oninput = function() {
             output.innerHTML = this.value + " %";
         }
 
-        // --- Função para BUSCAR dados do ESP32 (GET) ---
         function fetchData() {
             fetch('/data.json')
                 .then(response => response.json())
                 .then(data => {
-                    // Atualiza Data e Hora
                     document.getElementById('date').innerText = data.date;
                     document.getElementById('time').innerText = data.time;
                     
-                    // Atualiza Sensores
                     document.getElementById('temperatura').innerHTML = parseFloat(data.temperatura).toFixed(1) + ' &deg;C';
                     document.getElementById('humidade').innerHTML = parseFloat(data.humidade).toFixed(1) + ' %';
-                    document.getElementById('luminosidade').innerHTML = parseInt(data.luminosidade) + ' lux';
+                    
+                    // ATUALIZADO: Removemos o 'lux' e mostramos o valor raw
+                    document.getElementById('luminosidade').innerHTML = parseInt(data.luminosidade);
 
-                    // Atualiza os valores das Configurações salvas
                     document.getElementById('horaLigar').value = data.hora_ligar;
                     document.getElementById('horaDesligar').value = data.hora_desligar;
-                    document.getElementById('luzMaxima').value = data.luz_maxima; // Key atualizada
-                    document.getElementById('luzValor').innerHTML = data.luz_maxima + " %"; // Key atualizada
+                    document.getElementById('luzMaxima').value = data.luz_maxima;
+                    document.getElementById('luzValor').innerHTML = data.luz_maxima + " %";
                 })
                 .catch(error => { console.error('Erro ao buscar dados:', error); });
         }
         
-        // --- Função para ENVIAR dados para o ESP32 (POST) ---
+        // ... (formSettings onsubmit) ...
         document.getElementById('formSettings').addEventListener('submit', function(e) {
-            e.preventDefault(); // Impede o recarregamento da página
-
+            e.preventDefault(); 
             fetch('/settings', {
                 method: 'POST',
-                body: new FormData(this) // Envia (ligar, desligar E luzMaxima)
+                body: new FormData(this)
             })
             .then(response => {
                 if(response.ok) {
@@ -125,13 +123,15 @@ const char *DashboardServer::_dashboard_html = R"EOF(
             });
         });
 
-        // Loop de atualização
         fetchData();
-        setInterval(fetchData, 2000); // Intervalo de atualização
+        setInterval(fetchData, 5000); // Intervalo de atualização
     </script>
 </body>
 </html>
 )EOF";
+
+// ... (resto do ficheiro DashboardServer.cpp) ...
+// Nenhuma outra mudança é necessária neste ficheiro.
 
 DashboardServer::DashboardServer(int port) : _server(port)
 {
